@@ -1,34 +1,23 @@
+const params = new URLSearchParams(window.location.search);
 
-  const params = new URLSearchParams(window.location.search);
-  const messageBox = document.getElementById('floatingMessage');
-  const messageText = document.getElementById('messageText');
-
-  function showMessage(text, color) {
-    messageText.textContent = text;
-    messageBox.style.backgroundColor = color;
-    messageBox.style.display = 'block';
-
-    setTimeout(() => {
-      messageBox.style.display = 'none';
-    }, 3000);
-  }
-
+  // ✅ Entry alert
   if (params.has('entry')) {
-    const name = decodeURIComponent(params.get('entry'));
-    showMessage(`${name} entered the library.`, '#4caf50'); // Green
+    alert(`${decodeURIComponent(params.get('entry'))} entered the library.`);
   }
 
+  // ✅ Exit alert
   if (params.has('exit')) {
-    const name = decodeURIComponent(params.get('exit'));
-    showMessage(`${name} exited the library.`, '#2196f3'); // Blue
+    alert(`${decodeURIComponent(params.get('exit'))} exited the library.`);
   }
 
+  // ✅ Invalid number error
   if (params.has('error')) {
-    showMessage(`❌ Please check the registration number.`, '#f44336'); // Red
+    const errBox = document.getElementById('errorMessage');
+    errBox.style.display = 'block';
+    setTimeout(() => errBox.style.display = 'none', 2000);
   }
 
-  // Optional: Clear URL parameters after showing message
+  // ✅ Clean URL (remove ?entry/exit/error after showing)
   if (params.has('entry') || params.has('exit') || params.has('error')) {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
-

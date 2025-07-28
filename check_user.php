@@ -1,47 +1,75 @@
 <?php
-session_start();
-require 'db.php';
+require __DIR__. '/vendor/autoload.php';
 
-$last5 = $_POST['registry_last5'] ?? '';
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 
-// 1️⃣ Find user in users table
-$sql = "SELECT * FROM users WHERE RIGHT(full_reg_no, 5) = '$last5' LIMIT 1";
-$result = $conn->query($sql);
+date_default_timezone_set("Asia/Kolkata");
 
-if ($result->num_rows > 0) {
-    $user = $result->fetch_assoc();
-    $fullReg = $user['full_reg_no'];
+$enrollment = $_POST['enrollment'] ?? '';
 
-    // 2️⃣ Check if an open log exists (exit_time is NULL)
-    $checkLog = $conn->query("
-        SELECT id FROM library_log 
-        WHERE full_reg_no = '$fullReg' 
-        AND exit_time IS NULL LIMIT 1
-    ");
+$masterFile = __DIR__ . "/master.xlsx";
+$logFile = __DIR__ . "/logs/log_" . date("Y-m-d") . ".xlsx";
 
-    if ($checkLog->num_rows > 0) {
-        // ✅ EXIT → update exit_time & redirect with message
-        $logId = $checkLog->fetch_assoc()['id'];
-        $conn->query("UPDATE library_log SET exit_time = NOW() WHERE id = $logId");
-        header("Location: index.html?exit=" . urlencode($user['name']));
-        exit();
+// Load master data
+$spreadsheet = IOFactory::load($masterFile);
+$sheet = $spreadsheet->getActiveSheet();
+$highestRow = $sheet->getHighestRow();
 
-    } else {
-        // ✅ ENTRY → only set session, DO NOT insert log yet
-        $_SESSION['name']        = $user['name'];
-        $_SESSION['full_reg_no'] = $user['full_reg_no'];
-        $_SESSION['branch']      = $user['branch'];
-        $_SESSION['year']        = $user['year'];
-        $_SESSION['email']       = $user['email'];
-
-        // Redirect to dashboard for confirmation
-        header("Location: dashboard.php");
-        exit();
+$name = '';
+for ($row = 2; $row <= $highestRow; $row++) {
+    $cellValue = $sheet->getCell("B$row")->getValue();
+    if ($cellValue == $enrollment) {
+        $name = $sheet->getCell("A$row")->getValue();
+        break;
     }
-
-} else {
-    // ❌ INVALID → redirect with error
-    header("Location: index.html?error=1");
-    exit();
 }
+
+if ($name == '') {
+    echo "<script>alert('Enrollment number not found.'); window.history.back();</script>";
+    exit;
+}
+
+// Check if log file exists
+if (!file_exists($logFile)) {
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+    $sheet->setCellValue('A1', 'Enrollment');
+    $sheet->setCellValue('B1', 'Name');
+    $sheet->setCellValue('C1', 'Entry Time');
+    $sheet->setCellValue('D1', 'Exit Time');
+
+    $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
+    $writer->save($logFile);
+}
+
+// Load log sheet
+$spreadsheet = IOFactory::load($logFile);
+$sheet = $spreadsheet->getActiveSheet();
+$logRow = $sheet->getHighestRow() + 1;
+$found = false;
+
+// Check for previous entry
+for ($i = 2; $i <= $sheet->getHighestRow(); $i++) {
+    if ($sheet->getCell("A$i")->getValue() == $enrollment && $sheet->getCell("D$i")->getValue() == '') {
+        // Mark exit
+        $sheet->setCellValue("D$i", date("H:i:s"));
+        $found = true;
+        $message = "Exit marked for $name";
+        break;
+    }
+}
+
+if (!$found) {
+    // Mark entry
+    $sheet->setCellValue("A$logRow", $enrollment);
+    $sheet->setCellValue("B$logRow", $name);
+    $sheet->setCellValue("C$logRow", date("H:i:s"));
+    $message = "Entry marked for $name";
+}
+
+$writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
+$writer->save($logFile);
+
+echo "<script>alert('$message'); window.location.href='index.html';</script>";
 ?>
